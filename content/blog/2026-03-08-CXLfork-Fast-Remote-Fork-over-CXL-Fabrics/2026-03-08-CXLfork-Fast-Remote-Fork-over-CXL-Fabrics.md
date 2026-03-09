@@ -18,22 +18,38 @@ The rise of serverless computing (Function-as-a-Service) has brought the challen
 The paper *CXLfork: Fast Remote Fork over CXL Fabrics* introduces a novel remote fork interface designed for the emerging Compute Express Link (CXL) interconnect. By leveraging CXL's ability to provide shared, byte-addressable remote memory, CXLfork achieves near-zero serialization and zero-copy process cloning across nodes.
 ## Background and Motivation
 
-### Limitations of Existing Remote Fork Technologies
+### CXL's Advantage
 
 The authors analyzed the access patterns of common FaaS workloads and categorized the data accesses into 3 types:
 - **Init:** Data that is used for function initialization and is rarely accessed during execution.
 - **Read-only:** Data that is only read during function execution.
 - **Read/Write:** Data that is both written and read during function execution.
+
 ![Function Memory Footprint](./function-mem-footprint.png)
 
-Traditional remote fork mechanisms like CRIU (Checkpoint and Restore in Userspace) and Mitosis were designed for environments with disconnected memory.
+The results depicted above showed that on average the *Init* and *Read-only* functions made up the bulk of the memory footprint, being responsible for 72.2% and 23% of the footprint, respectively. These findings imply that remote forks can benefit significantly from storing the common states of the *Init* and *Read-only* functions in a CXL shared memory. Allowing cluster-wide memory deduplication and potentially increasing the number of function instances that can be run on a fixed local memory budget.
 
-- **CRIU:** Serializes the entire process state and memory to files, leading to high restoration latency and massive local memory consumption as no state is shared between parent and child.
-- **Mitosis:** Uses RDMA to lazily copy pages, which avoids full serialization but still incurs significant overhead from data copies and serializing OS-managed state.
+### Limitations of Existing Remote Fork Technologies
+The paper analyzes two existing remote fork mechanisms, ***CRIU*** (*Checkpoint and Restore In Userspace*) and ***Mitosis***, and evaluates their performance when adapted to use shared CXL memory. 
 
-### CXL's Advantage
+#### ***CRIU:***
+Referred to as a "*state-of-practice*" framework, ***CRIU*** does not utilize a cluster's network fabric. Instead, to create a remote fork, it uses Protocol Buffers to indirectly copy a process' state from one node to another through a serialization-deserialization process. The authors adapted this framework to CXL by caching the serialized OS state in shared CXL memory during the *checkpoint* phase and then deserializing to the target node during the *restore* phase. This process is shown in the image below:
 
-CXL 3.0 enables rack-scale, cache-coherent memory sharing at cache-line granularity. The authors observed that FaaS workloads often consist of large amounts of initialization (Init) and read-only data (averaging ~95% of the footprint combined). CXLfork exploits this by storing this common state in CXL shared memory, allowing multiple remote clones to access it directly without local copies.
+![CRIU-CXL](./criu-cxl.png)
+
+#### ***Mitosis:*** 
+Referred to as a "*state-of-the-art*" framework, ***Mitosis*** utilizes the cluster's network fabric RDMA capabilities to accelerate the remote forking process. OS state is transferred similarly to ***CRIU's*** serialization-deserialization process, just using one-sided RDMA opererations to transfer the serialized OS state instead, the main difference being the forked process is executed without the parent process' memory pages available. This causes special page faults to trigger that will copy the required pages via remote paging. The authors adapted ***Mitosis*** to support CXL by replacing the RMDA operations with page copies over the shared CXL memory. The remote page faults and OS state transfers are also served through the CXL memory. This process is shown in the image below:
+
+![Mitosis-CXL](./mitosis-cxl.png)
+
+#### BERT Function Evaluation
+These adaptations were evaluated by comparing the latency and memory usage during BERT function execution:
+
+![BERT Function Results](./bert-results.png)
+
+The authors found that ***CRIU's*** *restore* phase latency alone was 2.7x longer than the entirety of a local fork equivalent. Furthermore, ***CRIU's*** memory overhead was found to be 42x greater than a local fork. For ***Mitosis*** the findings were slightly better, but the latency overhead was still 2.6x longer than a local fork, and memory usage was 24x greater. 
+
+These findings were the main motivations for designing a new remote fork interface for CXL fabrics. 
 
 ## Design of CXLfork
 
