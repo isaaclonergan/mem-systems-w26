@@ -128,6 +128,7 @@ title = "CXL"
 leader = "Lab 2: William Davis and Carlos"
 readings = ["cxlfork"]
 paper_slides = "https://canvas.oregonstate.edu/courses/2028992/files/116902080?module_item_id=26569628"
+blog_link = "../blog/cxlfork-fast-remote-fork-over-cxl-fabrics"
 
 [[classes]]
 lesson = 17
