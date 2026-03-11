@@ -21,7 +21,7 @@ The goal of this project was to identify real-world workloads to gather memory t
 ## Background
 
 ### MemGaze:
-MemGaze is a low-level memory analysis tool designed to capture memory access traces from an executing application binary. To gather these traces, MemGaze takes advantage of the Intel Processor instruction ptwrite. The tool uses DynInst to instrument the target application at the binary level, injecting a ptwrite instruction after every memory access. During run time, the CPU’s hardware records the trace point, the accessed memory address, and the execution sequence directly into a trace buffer. Memgaze then processes the raw trace to find memory characteristics. 
+MemGaze is a low-level memory analysis tool designed to capture memory access traces from an executing application binary. To gather these traces, MemGaze takes advantage of the Intel Processor instruction ptwrite. The tool uses DynInst to instrument the target application at the binary level, injecting a ptwrite instruction after every memory access. During run time, the CPU’s hardware records the trace point and the accessed memory address. Memgaze then processes the raw trace to find memory characteristics. 
 
 ### Mempower: 
 The traces gathered in this project are meant to benchmark Mempower, a model-based power management framework. The goal of MemPower is to take advantage of CPU stalls during memory access to reduce wasted power consumption during these stalls. MemPower does this by analyzing MemGaze traces, identifying specific latency-bound memory “hotspots”, and running them through a custom cost-benefit model that determines if the energy savings gained outweigh the hardware latency cost. MemPower then triggers P-state transitions to lower the CPU frequency when the cost-benefit model determines that the energy savings outweigh the hardware latency cost. This results in a more optimized system with lower power consumption without sacrificing performance. 
@@ -43,11 +43,18 @@ The implementation process consisted of several steps. First, the workload was c
 
 Example execution looked like:
 
-<center><img src="dot_plot.png" alt="Alt text" width="400" height="400"></center>
+<p align="center">
+  <img src="dot_plot.png" alt="Graph of memory access plots"/>
+  <br>
+  <span>Figure 1: Shows cpu heat map of traces Lulesh 2.0.</span>
+</p>
+
 
 
 When the program runs, MemGaze records detailed information about memory accesses, including addresses and access frequencies. After the traces were generated, they were processed and converted into graphs showing memory access frequency, memory utilization over time, and general memory activity patterns. These graphs served as the primary tool for understanding how the workload interacted with the memory subsystem.
 
+### Methodology
+We specifically looked for OpenMP workloads as OpenMP forces all the threads to share the same memory space. This creates memory traffic jams and cache stalls that MemPower is designed to optimize. Once we found OpenMP workloads, we used MemGaze to collect all of the memory accesses at the binary level. The raw output from MemGaze is a massive binary, so we needed to translate it. We then used several Python scripts to shift the instruction pointers (IPs) so that the memory addresses matched their original source code, and then mapped those corrected addresses to their block IDs, which indicate which functions the CPU was executing. Then, by generating a weighted edge list and applying a Directed Louvain algorithm, we mapped execution traffic and isolated the distinct phases of the workload. This weighted edge list then allowed us to graph the block IDs so we could visualize their specific functions' CPU usage.
 
 ## Results
 
@@ -79,6 +86,18 @@ This was gathered using these formulas in a Python script:
 
 This data shows that for 80% of these execution paths represent the setup, teardown, and transitional period where the CPU is primarily idle waiting for data to load from memory. This split of “cold” and “hot” regions represents the compute-heavy inner loop and memory-bound outer branches. This validates the premise of MemPower because 80% of the execution paths are “cold”, which represent bottlenecks in memory retrieval rather than processor speed. Maintaining the CPU at its maximum p-state during these “cold” regions is a waste of power consumption. Based on this data, LULESH would be a perfect candidate for MemPower due to the wasted power consumption we see while in the “cold” regions, as MemPower can take advantage of this region and lower the p-state, which would, in theory, greatly reduce the power consumption of running this simulation.
 
+
+<p>
+  <img src="MemAccessesFreq.png" alt="Graph of memory access plots"/>
+  <br>
+  <span>Figure 2: Shows the most frequently accessed blocks</span>
+</p>
+<p>
+  <img src="Distributionofmemaccesses.png" alt="Graph of memory access plots"/>
+  <br>
+  <span>Figure 3: Execution paths sorted from the most active to the least active using log scale</span>
+</p>
+
 ## Challenges 
 #### What Were the Hardest Parts to Get Right?
 The most difficult parts of conducting this research project were finding the right machine, setting up the tooling, and [insert one more here]. Since the **ptwrite** instruction is quite specific, finding hardware with what we needed took some time. After getting the setting figured out, downloading, compiling, and running the workloads was half of the battle. These workloads are not simply plug and play tools, they require many dependencies, compilation arguments and must operate with OpenMP. After getting over these hurdles, taking traces became streamlined, and creating graphs followed soon afer.
@@ -86,9 +105,9 @@ The most difficult parts of conducting this research project were finding the ri
 #### What Was Surprising?
 **Deptmer:** "I think what was most surprising was how long it took just to get everything setup. I was so worried about the data and what it would mean that I never considered what tools we needs and how careful, and particular you need to be about them."
 
-**Soren:**
+**Soren:** "My biggest surprise was the learning curve on using all of the tools that were required to gather the traces. I had not used a nix-shell before and was not familiar with all of the programs we used, so it took me some time to be able to navigate through our project."
 
-**Nolan:**
+**Nolan:** "I was surprised at the difficulty of finding the right hardware for our experimental setup. PTWRITE is a relatively new instruction, and getting access to a server that was both powerful enough to run LULESH and had the instruction was tricky. We were fortunate to have been given access to a private server managed by Northwestern, but had that not been the case, it would have been much more difficult to get setup."
 
 #### Were You Successful?
 Ultimately the research was a success. Albeit there were some large hiccups, we got to see what we were looking for. There is always time to gather more information and compare against other workloads but getting one and seeing what it means to do research in computer science is plenty in a couple of months. 
