@@ -36,6 +36,15 @@ It does this for ten iterations and measures the average number of cycles. the t
 ## Results
 We ran this on two platforms. We first ran it on an platoform that only had the fast tier of memory to get a baseline performance of our system. We then ran it on with tiering controller and measured the percentage slowdown.
 
+![Results](./benchmark.png)
+### Slowdown
+- Copy: 1.28x
+- Scale: 1.22x
+- Add: 1.33x
+- Triad: 1.26x
+- Total: 1.27x
+
+The latency for the fast Tier was 
 
 # Challenges
 Some of the most significant challenges just involved working with the Xilinx/AMD tools (Vivado and Vitis). They were pretty unintuitive at times. One of the largest struggles in the beginning was getting the first AXI4 IP (the latency injector) properly packaged. Once you have the RTL implementation of your design, you must run it through Vivado's AXI IP packager, which configures interfaces properly so that the block can be integrated into a top-level block design and interact with the other AXI IPs correctly. For a while, we were sure we had the latency injector logic designed correctly, but our tests were consistently showing that both AXI BRAMs were being accessed with the same latency. This meant that our latency injector was being bypassed, but we weren't sure why. It turned out to be a memory mapping issue. In the IP packager, we had misconfigured the memory mapping of the input and output AXI interfaces in a few important ways. Even though the top-level memory map looked correct, the latency injector IP was not properly configured to route the input interface through the logic to the output interface. Another challenge was debugging.
